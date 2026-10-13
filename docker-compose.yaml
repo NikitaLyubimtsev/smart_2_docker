@@ -1,0 +1,113 @@
+services:
+  mysql:
+    image: mysql:5.7
+    platform: linux/amd64
+    container_name: mysql57
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: master
+      MYSQL_USER: master
+      MYSQL_PASSWORD: 0B7mIT&96PG*
+      MYSQL_ROOT_PASSWORD: 0B7mIT&96PG*
+      TZ: Europe/Moscow
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql57_data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./conf/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+
+    healthcheck:
+      test: [
+        "CMD",
+        "mysqladmin",
+        "ping",
+        "-h",
+        "localhost",
+        "-umaster",
+        "-p0B7mIT&96PG*"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - app_net
+
+  web:
+    build:
+      context: ./apache
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: apache_php
+    restart: unless-stopped
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+#    ports:
+#      - "8080:80"
+
+    volumes:
+      - ./www/smartprorab:/var/www/smartprorab
+      - ./apache/php.ini:/usr/local/etc/php/conf.d/zz-custom.ini:ro
+      - ./apache/000-default.conf:/etc/apache2/sites-available/000-default.conf:ro
+
+    environment:
+      DB_HOST: mysql
+      DB_NAME: master
+      DB_USER: master
+      DB_PASSWORD: 0B7mIT&96PG*
+      TZ: Europe/Moscow
+
+    networks:
+      - app_net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - app_net
+    depends_on:
+      - web
+
+  php-my-admin:
+    image: phpmyadmin/phpmyadmin:5.2.2
+    container_name: php_my_admin
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: 0B7mIT&96PG*
+      UPLOAD_LIMIT: 128M
+    networks:
+      - app_net
+
+volumes:
+  mysql57_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  app_net:
+    driver: bridge
